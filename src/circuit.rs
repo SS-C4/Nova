@@ -45,7 +45,7 @@ impl NovaAugmentedCircuitParams {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(bound = "")]
 pub struct NovaAugmentedCircuitInputs<G: Group> {
   params: G::Scalar,

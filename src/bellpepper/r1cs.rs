@@ -12,6 +12,8 @@ use crate::{
 use bellpepper_core::{Index, LinearCombination};
 use ff::PrimeField;
 
+const IS_PACKED: bool = true;
+
 /// `NovaWitness` provide a method for acquiring an `R1CSInstance` and `R1CSWitness` from implementers.
 pub trait NovaWitness<G: Group> {
   /// Return an instance and witness, given a shape and ck.
@@ -60,8 +62,8 @@ macro_rules! impl_nova_shape {
         let mut X = (&mut A, &mut B, &mut C, &mut num_cons_added);
 
         let num_inputs = self.num_inputs();
-        let num_constraints = self.num_constraints();
-        let num_vars = self.num_aux();
+        let num_constraints = self.num_constraints(); // Should be wrong since we're adding stuff now
+        let num_vars = self.num_aux(); // Should be correct since we allocate extra stuff earlier
 
         for constraint in self.constraints.iter() {
           add_constraint(
@@ -73,11 +75,43 @@ macro_rules! impl_nova_shape {
           );
         }
 
+        let mut extra_constraints = 0;
+
+        if IS_PACKED == true {
+          let mut is_actual = true;
+          if num_constraints <= 15000 {
+            is_actual = false;
+          }
+
+          if is_actual {
+            // Add extra PoSO constraints
+
+            let original_num_vars = num_vars - num_constraints - 909; // This is not accounting for the extra hash
+
+            for j in 0..9 {
+              for i in 0..original_num_vars {
+                C.push((num_constraints+j, i, G::Scalar::from((j+i%8) as u64)));
+              }
+            }
+
+            // Add extra constraints for bit decomposition
+            // 100 for each PoSO
+            for j in 0..9 {
+              for i in 0..100 {
+                C.push((num_constraints + 100*j + i, num_vars - i - 100*j, G::Scalar::from((i%2) as u64)));
+              }
+            }
+          }
+          extra_constraints += 9 + 9*100;
+        }
+
+        // Assert doesn't change since we don't call add_constraint to add the extra constraints
         assert_eq!(num_cons_added, num_constraints);
 
         let S: R1CSShape<G> = {
           // Don't count One as an input for shape's purposes.
-          let res = R1CSShape::new(num_constraints, num_vars, num_inputs - 1, &A, &B, &C);
+          // num_constraints + 1 because we add an extra constraint
+          let res = R1CSShape::new(num_constraints + extra_constraints, num_vars, num_inputs - 1, &A, &B, &C);
           res.unwrap()
         };
 
@@ -124,10 +158,24 @@ fn add_constraint<S: PrimeField>(
     add_constraint_component(index.0, coeff, A);
   }
   for (index, coeff) in b_lc.iter() {
-    add_constraint_component(index.0, coeff, B)
+    add_constraint_component(index.0, coeff, B);
   }
   for (index, coeff) in c_lc.iter() {
-    add_constraint_component(index.0, coeff, C)
+    add_constraint_component(index.0, coeff, C);
+  }
+
+  if IS_PACKED == true {
+    // Add extra variable to every constraint 
+    // Skip for dummy circuit
+
+    let mut is_actual = true;
+    if num_vars <= 11000 {
+      is_actual = false;
+    }
+
+    if is_actual {
+      C.push((n, num_vars - 2000 - **nn, S::from(1002)));
+    }
   }
 
   **nn += 1;

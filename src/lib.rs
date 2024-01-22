@@ -175,6 +175,15 @@ where
       self.r1cs_shape_secondary.num_vars,
     )
   }
+
+  /// Returns the R1CS shape of the primary and secondary circuits
+  pub fn r1cs_shape(&self) -> (R1CSShape<G1>, R1CSShape<G2>) {
+    (
+      self.r1cs_shape_primary.clone(), 
+      self.r1cs_shape_secondary.clone()
+    )
+  }
+
 }
 
 /// A SNARK that proves the correct execution of an incremental computation
@@ -229,7 +238,7 @@ where
 
     let circuit_primary: NovaAugmentedCircuit<'_, G2, C1> = NovaAugmentedCircuit::new(
       &pp.augmented_circuit_params_primary,
-      Some(inputs_primary),
+      Some(inputs_primary.clone()),
       c_primary,
       pp.ro_consts_circuit_primary.clone(),
     );
